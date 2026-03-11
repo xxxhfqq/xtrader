@@ -1,0 +1,26 @@
+# 核心依赖
+easytrader>=0.21.0
+baostock>=0.8.8
+akshare>=1.12.0
+akshare-proxy-patch>=0.2.7  # 保护东财接口，避免频繁调用被封禁
+
+# 数据处理
+pandas>=1.5.0
+numpy>=1.21.0
+
+# 强化学习
+gymnasium>=0.28.0
+stable-baselines3>=2.0.0
+torch>=2.0.0
+torchvision>=0.15.0
+
+# 技术指标
+stockstats>=0.6.0
+
+# 可视化与工具
+tqdm>=4.64.0
+tensorboard>=2.10.0
+
+# Windows系统依赖
+pywin32>=305; sys_platform == 'win32'
+pytesseract>=0.3.10
