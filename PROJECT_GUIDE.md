@@ -109,7 +109,8 @@
 说明：
 
 - 交易主循环来自找回文件并接入新推理接口
-- 推理动作输出 `[-1, 1]`，实盘侧转换为目标仓位 `[0, 1]`
+- 推理动作输出 `[-1, 1]`，先线性映射为目标仓位 `[0, 1]`（`target=(signal+1)/2`）
+- 实盘下单前还会经过阈值离散化与交易约束（最小交易额、整手、可用资金/可卖股数等），最终成交仓位不与原始动作严格等价
 - 仍建议先在模拟/小仓位环境验证券商端字段与委托行为
 
 ---
@@ -147,10 +148,10 @@
 
 - `topK`
   - 在 `main.py` 中表示“从 `trade_codes` 候选池中最多管理多少只交易标的（槽位数）”
-  - 在 `main_infer.py` 中仅用于展示前 K 个信号
+  - 在 `main_infer.py` 中仅用于额外展示前 K 个信号，不影响全量推理与排序
 - `run_full_infer`
-  - `true`：`main.py` 启动与跨日时，对全标的（`train_codes + infer_codes + trade_codes`）按“空仓状态”做一次推理，并按分数降序打印
-  - `false`：`main.py` 跳过上述全标的快照；`main_infer.py` 仅对 `trade_codes`（若为空则回退 `infer_codes`）推理
+  - `true`：`main.py` 启动与跨日时，对全标的（`train_codes + infer_codes + trade_codes`）按“空仓状态”做一次推理并排序；`main_infer.py` 同样对该全量集合做推理与全量排序
+  - `false`：`main.py` 跳过上述全标的快照；`main_infer.py` 仅对 `trade_codes`（若为空则回退 `infer_codes`）推理并排序
 
 ### 7.3 股票列表
 

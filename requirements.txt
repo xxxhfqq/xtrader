@@ -7,6 +7,7 @@ akshare-proxy-patch>=0.2.7  # 保护东财接口，避免频繁调用被封禁
 # 数据处理
 pandas>=1.5.0
 numpy>=1.21.0
+scipy>=1.9.0  # gymnasium/stable-baselines3 内部使用
 
 # 强化学习
 gymnasium>=0.28.0
@@ -17,11 +18,18 @@ torchvision>=0.15.0
 # 技术指标
 stockstats>=0.6.0
 
+# 网络与工具
+requests>=2.28.0  # akshare/baostock/easytrader 等依赖
+
 # 可视化与工具
 tqdm>=4.64.0
+rich>=13.0.0  # stable-baselines3 进度条回调依赖
 tensorboard>=2.10.0
 python-dotenv>=1.0.0
 
-# Windows系统依赖
+# Windows 实盘 / easytrader 相关
+pywinauto>=0.6.8  # x_fin.easytrader_patch 中显式使用
 pywin32>=305; sys_platform == 'win32'
 pytesseract>=0.3.10
+Pillow>=9.0.0  # easytrader 验证码识别依赖
+openpyxl>=3.0.0  # easytrader 网格策略 Xls 读写 Excel 时可能用到
