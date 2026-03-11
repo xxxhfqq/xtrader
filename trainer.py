@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import csv
 from pathlib import Path
 from datetime import datetime
 from typing import Any
@@ -50,11 +51,42 @@ class ValidateSaveBestCallback(BaseCallback):
         save_cfg = cfg["save"]
         self.best_model_name = str(save_cfg["best_model_name"])
         self.best_log_file = self.save_dir / str(save_cfg["best_log_file"])
+        self.eval_csv_file = self.save_dir / str(save_cfg["eval_csv_file"])
         self.best_log_file.parent.mkdir(parents=True, exist_ok=True)
+        self.eval_csv_file.parent.mkdir(parents=True, exist_ok=True)
 
     def _append_log(self, payload: dict[str, Any]) -> None:
         with self.best_log_file.open("a", encoding="utf-8") as f:
             f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+    def _append_eval_csv(self, *, timestamp: str, rollout_idx: int, metrics: dict[str, Any]) -> None:
+        evaluated_count = int(metrics["evaluated_count"])
+        avg_real_return = float(metrics["total_pnl_pct"])
+        total_pnl = float(metrics["total_pnl"])
+        write_header = not self.eval_csv_file.exists()
+        with self.eval_csv_file.open("a", encoding="utf-8", newline="") as f:
+            writer = csv.writer(f)
+            if write_header:
+                writer.writerow(
+                    [
+                        "timestamp",
+                        "num_timesteps",
+                        "rollout_index",
+                        "evaluated_count",
+                        "avg_real_return",
+                        "total_pnl",
+                    ]
+                )
+            writer.writerow(
+                [
+                    timestamp,
+                    int(self.num_timesteps),
+                    rollout_idx,
+                    evaluated_count,
+                    avg_real_return,
+                    total_pnl,
+                ]
+            )
 
     def _evaluate_and_maybe_save(self) -> None:
         assert self.model is not None
@@ -63,6 +95,7 @@ class ValidateSaveBestCallback(BaseCallback):
         total_pnl_pct = float(metrics["total_pnl_pct"])
         evaluated_count = int(metrics["evaluated_count"])
         rollout_idx = int(self.num_timesteps // self.rollout_steps)
+        timestamp = datetime.now().isoformat(timespec="seconds")
 
         per_symbol_rounded = {
             k: {
@@ -79,7 +112,7 @@ class ValidateSaveBestCallback(BaseCallback):
             self.model.save(str(self.save_dir / self.best_model_name))
 
         log_payload = {
-            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "timestamp": timestamp,
             "num_timesteps": int(self.num_timesteps),
             "rollout_index": rollout_idx,
             "total_pnl": round(total_pnl, 2),
@@ -91,6 +124,7 @@ class ValidateSaveBestCallback(BaseCallback):
             "is_new_best": bool(improved),
         }
         self._append_log(log_payload)
+        self._append_eval_csv(timestamp=timestamp, rollout_idx=rollout_idx, metrics=metrics)
 
         if self.verbose > 0:
             print(

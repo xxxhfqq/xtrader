@@ -31,11 +31,11 @@ def refresh_symbol_data(
 
         try:
             set_ratio(symbol)
-        except Exception:
-            pass
+        except Exception as exc:
+            raise RuntimeError(f"更新复权比例失败: {symbol}, error={exc}") from exc
 
         try:
             update_infer_data_from_ak(symbol)
-        except Exception:
-            pass
+        except Exception as exc:
+            raise RuntimeError(f"更新 infer 数据失败: {symbol}, error={exc}") from exc
 

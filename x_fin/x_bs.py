@@ -2,9 +2,21 @@ import baostock as bs
 import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
+import os
+try:
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover
+    load_dotenv = None
+
+if load_dotenv is not None:
+    load_dotenv()
 # 安装 akshare-proxy-patch 以保护东财接口，避免频繁调用被封禁
 import akshare_proxy_patch
-akshare_proxy_patch.install_patch("101.201.173.125", "20260226NX2E", 30)  # AUTH_TOKEN已配置，retry=30表示重试次数
+_PATCH_HOST = os.environ.get("AKSHARE_PROXY_HOST", "").strip()
+_PATCH_TOKEN = os.environ.get("AKSHARE_PROXY_TOKEN", "").strip()
+_PATCH_RETRY = int(os.environ.get("AKSHARE_PROXY_RETRY", "30") or 30)
+if _PATCH_HOST and _PATCH_TOKEN:
+    akshare_proxy_patch.install_patch(_PATCH_HOST, _PATCH_TOKEN, _PATCH_RETRY)
 
 import akshare as ak
 import numpy as np
@@ -19,6 +31,10 @@ MAX_RETRIES = 3      # 最大重试次数
 
 # 批量拉取配置
 BATCH_SIZE = 30      # 每批拉取的天数（减少请求次数）
+
+
+def _yesterday_date() -> pd.Timestamp:
+    return pd.to_datetime("today").normalize() - pd.Timedelta(days=1)
 
 def _fetch_days_individually(code, fields, batch_start, batch_end, frequency, adjustflag):
     """
@@ -95,7 +111,7 @@ def update_data_from_bs(code="sh.601988", verbose=False):
     
     df = pd.read_csv(path)
     start_date = pd.to_datetime(df["date"].iloc[-1]).date()# + pd.Timedelta(days=1)
-    end_date   = pd.to_datetime("today").date()
+    end_date = _yesterday_date().date()
     
     # 获取参考文件（sh.603323.csv）的起始日期、行数和日期集合
     reference_start_date = None
@@ -246,7 +262,7 @@ def get_data_from_bs(code="sh.601988", fields="date,time,code,open,high,low,clos
         return
     
     if end_date is None:
-        end_date = str(pd.to_datetime("today").date())
+        end_date = str(_yesterday_date().date())
     
     # 将start_date转换为字符串格式（如果还不是）
     if isinstance(start_date, pd.Timestamp):

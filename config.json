@@ -68,7 +68,7 @@
   },
   "sampler": {
     "rollout_steps": 4096,
-    "infer_window_bars": 240,
+    "infer_window_bars": 960,
     "indicator_warmup_bars": {
       "macd": 33,
       "macd_5": 4,
@@ -90,17 +90,17 @@
     "features_extractor": {
       "name": "TinyTransformerFeatureExtractor",
       "architecture": "decoder_only",
-      "window_size": 240,
-      "d_model": 64,
-      "n_heads": 4,
-      "n_layers": 2,
-      "ffn_dim": 128,
+      "window_size": 960,
+      "d_model": 128,
+      "n_heads": 8,
+      "n_layers": 4,
+      "ffn_dim": 512,
       "dropout": 0.1,
       "pooling": "last"
     },
     "policy_head": {
-      "pi": [64, 64],
-      "vf": [64, 64]
+      "pi": [256, 256, 128],
+      "vf": [256, 256, 128]
     },
     "acceleration": {
       "use_sdpa": true,
@@ -156,6 +156,7 @@
   },
   "save": {
     "best_model_name": "best_model",
-    "best_log_file": "best_model_log.jsonl"
+    "best_log_file": "best_model_log.jsonl",
+    "eval_csv_file": "eval_metrics.csv"
   }
 }

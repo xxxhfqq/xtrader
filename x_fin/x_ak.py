@@ -1,12 +1,26 @@
 # 安装 akshare-proxy-patch 以保护东财接口，避免频繁调用被封禁
 import akshare_proxy_patch
-akshare_proxy_patch.install_patch("101.201.173.125", "20260226NX2E", 30)  # AUTH_TOKEN已配置，retry=30表示重试次数
+import os
+try:
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover
+    load_dotenv = None
+
+if load_dotenv is not None:
+    load_dotenv()
+_PATCH_HOST = os.environ.get("AKSHARE_PROXY_HOST", "").strip()
+_PATCH_TOKEN = os.environ.get("AKSHARE_PROXY_TOKEN", "").strip()
+_PATCH_RETRY = int(os.environ.get("AKSHARE_PROXY_RETRY", "30") or 30)
+if _PATCH_HOST and _PATCH_TOKEN:
+    akshare_proxy_patch.install_patch(_PATCH_HOST, _PATCH_TOKEN, _PATCH_RETRY)
 
 import akshare as ak
 import pandas as pd
 from pathlib import Path
 import numpy as np
 import json
+
+REQUIRED_INFER_COLUMNS = ["date", "code", "time", "open", "high", "low", "close", "volume"]
 
 save_path = Path.cwd() / "data" #ratio 在config.json
 
@@ -230,42 +244,47 @@ def update_infer_data_from_ak(code="sh.601988"):
                 print(f"[WARNING] 从历史数据提取失败 {code}: {e}")
                 df1 = None
     
-    # 更新 infer 文件
+    # 更新 infer 文件：
+    # 1) 以 x_bs 生成的 code_infer.csv 作为基线（该文件应是 code.csv 的末尾4k）
+    # 2) 把 x_ak 拉到的最新细粒度数据合入基线
+    # 3) 按 time 去重排序并截断到最近 4000 条
     infer_path = save_path / f"{code}_infer.csv"
+    csv_path = save_path / f"{code}.csv"
+    frames = []
+
+    if infer_path.exists():
+        try:
+            base_infer_df = pd.read_csv(infer_path)
+            if len(base_infer_df) > 0:
+                base_infer_df = base_infer_df[REQUIRED_INFER_COLUMNS].copy()
+                frames.append(base_infer_df)
+        except Exception as e:
+            print(f"[WARNING] 读取 infer 数据失败 {code}: {e}")
+
+    # 兜底：若 infer 不存在，退化为使用历史K线末尾4k做基线。
+    if not frames and csv_path.exists():
+        try:
+            hist_df = pd.read_csv(csv_path)
+            if len(hist_df) > 0:
+                hist_df = hist_df[REQUIRED_INFER_COLUMNS].copy()
+                frames.append(hist_df.tail(4000))
+        except Exception as e:
+            print(f"[WARNING] 读取历史数据失败 {code}: {e}")
+
     if df1 is not None and not df1.empty:
-        # 有新的数据，合并到 infer 文件
-        if infer_path.exists():
-            try:
-                df2 = pd.read_csv(infer_path)
-                df2["time"] = df2["time"].astype(np.int64)
-                df1["time"] = df1["time"].astype(np.int64)
-                df3 = pd.concat((df1, df2), ignore_index=True)
-                df3 = df3.drop_duplicates("time", keep="first")  # 新数据优先
-                df3 = df3.sort_values("time", ignore_index=True)
-                df3.to_csv(infer_path, index=False)
-            except Exception as e:
-                # 如果 infer 文件读取失败，直接使用新数据
-                df1["time"] = df1["time"].astype(np.int64)
-                df1 = df1.sort_values("time", ignore_index=True)
-                df1.to_csv(infer_path, index=False)
-        else:
-            # infer 文件不存在，直接创建
-            df1["time"] = df1["time"].astype(np.int64)
-            df1 = df1.sort_values("time", ignore_index=True)
-            df1.to_csv(infer_path, index=False)
-    else:
-        # 没有新数据，如果 infer 文件不存在，从历史数据创建
-        if not infer_path.exists():
-            csv_path = save_path / f"{code}.csv"
-            if csv_path.exists():
-                try:
-                    hist_df = pd.read_csv(csv_path)
-                    if len(hist_df) > 0:
-                        infer_data = hist_df.iloc[-4000:, :]
-                        infer_data.to_csv(infer_path, index=False)
-                        print(f"[INFO] {code} 从历史数据创建 infer 文件，共 {len(infer_data)} 条数据")
-                except Exception as e:
-                    print(f"[WARNING] 从历史数据创建 infer 文件失败 {code}: {e}")
+        frames.append(df1[REQUIRED_INFER_COLUMNS].copy())
+
+    if not frames:
+        return
+
+    merged = pd.concat(frames, ignore_index=True)
+    merged["time"] = pd.to_numeric(merged["time"], errors="coerce").astype("Int64")
+    merged = merged.dropna(subset=["time"]).copy()
+    merged["time"] = merged["time"].astype(np.int64)
+    merged = merged.sort_values("time", ignore_index=True)
+    merged = merged.drop_duplicates("time", keep="last")
+    merged = merged.tail(4000).reset_index(drop=True)
+    merged.to_csv(infer_path, index=False)
 
 
 

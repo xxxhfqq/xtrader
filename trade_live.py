@@ -485,7 +485,8 @@ def trade_code(code: str, target_ratio: float | None, allow_buy: bool = True) ->
 
         shares_by_rate = int(max_cash_to_use / (price * (1.0 + buy_fee_rate)))
         shares_by_min = int((max_cash_to_use - min_fee) / price) if max_cash_to_use > min_fee else 0
-        max_shares_by_cash = max(shares_by_rate, shares_by_min)
+        # 资金约束取更保守上限，避免因手续费估算差异导致余额不足拒单。
+        max_shares_by_cash = min(shares_by_rate, shares_by_min)
         max_shares_by_value = int(buy_value / price)
         buy_shares = min(max_shares_by_cash, max_shares_by_value)
         buy_shares = (buy_shares // lot_size) * lot_size

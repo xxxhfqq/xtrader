@@ -20,6 +20,7 @@ stockstats>=0.6.0
 # 可视化与工具
 tqdm>=4.64.0
 tensorboard>=2.10.0
+python-dotenv>=1.0.0
 
 # Windows系统依赖
 pywin32>=305; sys_platform == 'win32'

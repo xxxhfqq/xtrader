@@ -97,6 +97,7 @@ def _apply_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
     save = cfg.setdefault("save", {})
     save.setdefault("best_model_name", "best_model")
     save.setdefault("best_log_file", "best_model_log.jsonl")
+    save.setdefault("eval_csv_file", "eval_metrics.csv")
 
     trade = cfg.setdefault("trade", {})
     trade.setdefault("min_fee", 5.0)
@@ -271,6 +272,10 @@ def validate_config(cfg: dict[str, Any]) -> None:
         end = _as_time_str(session[1], f"trade.trading_sessions[{idx}][1]")
         if _time_seconds(start) >= _time_seconds(end):
             raise ValueError(f"trade.trading_sessions[{idx}] 要求 start < end")
+
+    save = _require_key(cfg, "save", "config")
+    _require_type(save, dict, "save")
+    _require_type(_require_key(save, "eval_csv_file", "save"), str, "save.eval_csv_file")
 
 
 def load_config(path: str | Path = "config.json") -> dict[str, Any]:
