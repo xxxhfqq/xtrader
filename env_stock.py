@@ -93,6 +93,8 @@ class AStockTradingEnv(gym.Env):
         assert self._close is not None
         assert self._open is not None
 
+        _eps = 1e-8
+
         left = self._idx - self.window_size + 1
         if left < 0:
             raise RuntimeError("观测窗口越界, 请检查 window_size 与采样起点")
@@ -104,15 +106,40 @@ class AStockTradingEnv(gym.Env):
         next_open = float(self._open[next_idx])
         close_now = float(self._close[self._idx])
         equity_now = self._equity(close_now)
+        max_buy = float(self._max_buyable(next_open))
+        max_sell = float(self._max_sellable())
+
+        # 账户特征统一做相对化：以当前总资产 equity_now 作为 1.0
+        # 保留 close_now / avg_cost 为绝对价格，避免丢失价格锚点。
+        cash_ratio = float(self._cash) / max(equity_now, _eps)
+        cash_ratio = float(np.clip(cash_ratio, 0.0, 1.0))
+
+        # equity_now 输入固定为单位 1，隐藏绝对资金规模
+        equity_unit = 1.0
+
+        # max_buyable -> 可买资金占比 [0,1]
+        buy_value_with_fee = max_buy * next_open * (1.0 + self.buy_fee_rate)
+        max_buy_ratio = buy_value_with_fee / max(equity_now, _eps)
+        max_buy_ratio = float(np.clip(max_buy_ratio, 0.0, 1.0))
+
+        # max_sellable -> 可卖市值占比 [0,1]
+        sell_value = max_sell * close_now
+        max_sell_ratio = sell_value / max(equity_now, _eps)
+        max_sell_ratio = float(np.clip(max_sell_ratio, 0.0, 1.0))
+
+        # locked -> 锁定市值占比 [0,1]
+        locked_value = float(self._locked) * close_now
+        locked_ratio = locked_value / max(equity_now, _eps)
+        locked_ratio = float(np.clip(locked_ratio, 0.0, 1.0))
 
         account = np.array(
             [
                 close_now,
-                float(self._cash),
-                equity_now,
-                float(self._max_buyable(next_open)),
-                float(self._max_sellable()),
-                float(self._locked),
+                cash_ratio,
+                equity_unit,
+                max_buy_ratio,
+                max_sell_ratio,
+                locked_ratio,
                 float(self._avg_cost),
             ],
             dtype=np.float32,

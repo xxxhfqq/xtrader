@@ -121,9 +121,10 @@
     "ent_coef": 0.01
   },
   "train": {
-    "seed": 42,
-    "total_timesteps": 5000000,
-    "validate_every_rollouts": 1000,
+    "seed": 87569,
+    "total_timesteps": 50000000,
+    "validate_every_rollouts": 20,
+    "ent_coef_multiplier": 5.0,
     "device": "cuda",
     "update_data_before_train": true,
     "update_data_before_infer": true

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import csv
+import math
 from pathlib import Path
 from datetime import datetime
 from typing import Any
@@ -54,6 +55,8 @@ class ValidateSaveBestCallback(BaseCallback):
         self.eval_csv_file = self.save_dir / str(save_cfg["eval_csv_file"])
         self.best_log_file.parent.mkdir(parents=True, exist_ok=True)
         self.eval_csv_file.parent.mkdir(parents=True, exist_ok=True)
+        self.reward_type = str(cfg["env"]["reward_type"])
+        self.initial_cash = float(cfg["env"]["initial_cash"])
 
     def _append_log(self, payload: dict[str, Any]) -> None:
         with self.best_log_file.open("a", encoding="utf-8") as f:
@@ -141,6 +144,37 @@ class ValidateSaveBestCallback(BaseCallback):
             self.next_eval_step += self.eval_interval_steps
         return True
 
+    def _on_rollout_end(self) -> None:
+        # 每个完整 rollout 后打印一次训练收益，便于观察探索是否在产生行为变化。
+        assert self.model is not None
+        rewards = self.model.rollout_buffer.rewards
+        if rewards is None:
+            return
+
+        rewards_arr = rewards
+        n_envs = int(rewards_arr.shape[1]) if rewards_arr.ndim == 2 else 1
+        reward_sum = float(rewards_arr.sum())
+        reward_sum_per_env = reward_sum / max(1, n_envs)
+        rollout_idx = int(self.num_timesteps // self.rollout_steps)
+
+        if self.reward_type == "log_return":
+            simple_return = math.expm1(reward_sum_per_env)
+            if self.verbose > 0:
+                print(
+                    f"[ROLLOUT] idx={rollout_idx}, steps={self.num_timesteps}, "
+                    f"log_reward_sum={reward_sum_per_env:.6f}, simple_return={simple_return:.4%}"
+                )
+            return
+
+        if self.reward_type == "equity_delta":
+            approx_pct = reward_sum_per_env / max(self.initial_cash, 1e-8)
+            if self.verbose > 0:
+                print(
+                    f"[ROLLOUT] idx={rollout_idx}, steps={self.num_timesteps}, "
+                    f"equity_delta={reward_sum_per_env:.2f}, approx_return={approx_pct:.4%}"
+                )
+            return
+
 
 def _maybe_compile_policy(model: PPO, cfg: dict[str, Any]) -> None:
     accel = cfg["model"]["acceleration"]
@@ -222,6 +256,13 @@ def train_from_config(config_path: str | Path = "config.json") -> Path:
     vec_env = DummyVecEnv([make_env])
     ppo_cfg = cfg["ppo"]
     policy_kwargs = build_policy_kwargs(cfg, market_feature_dim=len(market_cols))
+    ent_coef_base = float(ppo_cfg["ent_coef"])
+    ent_coef_multiplier = float(cfg["train"].get("ent_coef_multiplier", 1.0))
+    ent_coef = ent_coef_base * max(1.0, ent_coef_multiplier)
+    print(
+        f"[INFO] 探索系数 ent_coef: base={ent_coef_base:.6f}, "
+        f"multiplier={max(1.0, ent_coef_multiplier):.2f}, final={ent_coef:.6f}"
+    )
 
     model = PPO(
         policy="MlpPolicy",
@@ -233,7 +274,7 @@ def train_from_config(config_path: str | Path = "config.json") -> Path:
         gamma=float(ppo_cfg["gamma"]),
         gae_lambda=float(ppo_cfg["gae_lambda"]),
         clip_range=float(ppo_cfg["clip_range"]),
-        ent_coef=float(ppo_cfg["ent_coef"]),
+        ent_coef=ent_coef,
         policy_kwargs=policy_kwargs,
         device=str(cfg["train"]["device"]),
         verbose=1,

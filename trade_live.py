@@ -434,14 +434,7 @@ def trade_code(code: str, target_ratio: float | None, allow_buy: bool = True) ->
 
     state = code_states[code]
     actual_ratio = float(state["actual_ratio"])
-
-    if target_ratio >= OPEN_FULL_THRESHOLD:
-        target_ratio = 1.0
-    elif target_ratio <= FLAT_THRESHOLD:
-        target_ratio = 0.0
-
-    if abs(target_ratio - actual_ratio) < REBALANCE_DIFF_THRESHOLD:
-        return
+    target_ratio = float(target_ratio)
 
     pos_info = get_position_info(code) or {
         "shares": 0,
@@ -469,8 +462,6 @@ def trade_code(code: str, target_ratio: float | None, allow_buy: bool = True) ->
         target_value = total_asset * float(target_ratio)
         current_value = float(pos_info.get("market_value", 0.0))
         buy_value = target_value - current_value
-        if buy_value <= MIN_TRADE_VALUE:
-            return
 
         bid, ask = get_bid_ask(code)
         price = float(ask) if ask is not None and ask > 0 else float(current_price)
@@ -510,8 +501,6 @@ def trade_code(code: str, target_ratio: float | None, allow_buy: bool = True) ->
     target_value = total_asset * float(target_ratio)
     current_value = float(pos_info.get("market_value", 0.0))
     sell_value = current_value - target_value
-    if sell_value <= MIN_TRADE_VALUE:
-        return
 
     bid, ask = get_bid_ask(code)
     price = float(bid) if bid is not None and bid > 0 else float(current_price)
@@ -581,6 +570,8 @@ def find_new_candidate() -> tuple[str | None, float | None]:
     available_cash = get_available_cash()
     infer_cash_new = min(per_slot_quota, max(0.0, available_cash))
 
+    best_code: str | None = None
+    best_ratio: float | None = None
     for code in candidate_codes:
         if code in holding_codes or code in actual_holding_codes:
             continue
@@ -588,9 +579,10 @@ def find_new_candidate() -> tuple[str | None, float | None]:
         target_ratio = _infer_target_ratio(code, cash=infer_cash_new, shares=0, locked_today=0)
         if target_ratio is not None:
             print(f"[INFO] 候选标 {code} infer结果: 目标持仓比例={target_ratio:.3f}")
-        if target_ratio is not None and target_ratio > OPEN_CANDIDATE_THRESHOLD:
-            return code, target_ratio
-    return None, None
+            if best_ratio is None or float(target_ratio) > float(best_ratio):
+                best_code = code
+                best_ratio = float(target_ratio)
+    return best_code, best_ratio
 
 
 def adjust_portfolio() -> None:
