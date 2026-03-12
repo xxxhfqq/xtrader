@@ -282,22 +282,58 @@ def update_infer_data_from_ak(code="sh.601988"):
     merged = merged.dropna(subset=["time"]).copy()
     merged["time"] = merged["time"].astype(np.int64)
     merged = merged.sort_values("time", ignore_index=True)
-    merged = merged.drop_duplicates("time", keep="last")
+    # base(infer) 优先：重叠 time 时保留先出现的记录，不让 AK 覆盖
+    merged = merged.drop_duplicates("time", keep="first")
     merged = merged.tail(4000).reset_index(drop=True)
     merged.to_csv(infer_path, index=False)
 
 
 
-def set_ratio(code="sh.601988"):
+def _resolve_ratio_start_date(code: str, explicit_start_date: str | None = None) -> str:
+    """
+    计算 set_ratio 的起始日期（YYYYMMDD）：
+    1) 显式传入 explicit_start_date（优先）
+    2) 动态回退：基于本地最新数据日期回推 30 天
+    """
+    if explicit_start_date:
+        dt = pd.to_datetime(str(explicit_start_date), errors="coerce")
+        if pd.notna(dt):
+            return dt.strftime("%Y%m%d")
+
+    latest_date = None
+    # 动态回退优先级：先用主历史数据 code.csv，再退到 code_infer.csv
+    for p in (save_path / f"{code}.csv", save_path / f"{code}_infer.csv"):
+        if not p.exists():
+            continue
+        try:
+            df_local = pd.read_csv(p)
+            if "date" in df_local.columns and len(df_local) > 0:
+                d = pd.to_datetime(df_local["date"], errors="coerce").dropna()
+                if len(d) > 0:
+                    this_latest = d.iloc[-1].date()
+                    if latest_date is None or this_latest > latest_date:
+                        latest_date = this_latest
+        except Exception:
+            continue
+
+    if latest_date is not None:
+        return (pd.to_datetime(latest_date) - pd.Timedelta(days=30)).strftime("%Y%m%d")
+    return (pd.to_datetime("today").normalize() - pd.Timedelta(days=30)).strftime("%Y%m%d")
+
+
+def set_ratio(code="sh.601988", start_date: str | None = None):
 
     path1 = Path.cwd() / f"data/{code}.csv"  
     df1 = pd.read_csv(path1)
     df1 = df1[-1:]                   # 列: open
 
-    df2 = ak.stock_zh_a_hist_min_em(symbol=code[3:],  
-                                    start_date=pd.to_datetime("2026-01-20"),
-                                    period="5",
-                                    adjust="")        # 列: 开盘
+    resolved_start_date = _resolve_ratio_start_date(code, explicit_start_date=start_date)
+    df2 = ak.stock_zh_a_hist_min_em(
+        symbol=code[3:],
+        start_date=resolved_start_date,
+        period="5",
+        adjust="",
+    )        # 列: 开盘
     # 验证 akshare 数据
     validate_akshare_data(df2, code, "set_ratio")
     
@@ -332,6 +368,10 @@ def set_ratio(code="sh.601988"):
     df2 = ensure_datetime(df2)
 
     m = df1.merge(df2, on="date")
+    if m.empty:
+        raise RuntimeError(
+            f"[set_ratio] 无法对齐本地与 akshare 时间点，code={code}, start_date={resolved_start_date}"
+        )
     m["ratio1"] = m["open"] / m["开盘"]
     m["ratio2"] = m["close"] / m["收盘"]
     ratio = (m["ratio1"].iloc[0] + m["ratio2"].iloc[0]) / 2

@@ -139,11 +139,6 @@
   },
   "trade": {
     "min_fee": 5.0,
-    "open_full_threshold": 0.7,
-    "flat_threshold": 0.3,
-    "open_candidate_threshold": 0.3,
-    "rebalance_diff_threshold": 0.1,
-    "min_trade_value": 100.0,
     "bar_interval_minutes": 5,
     "order_settle_initial_wait_seconds": 3,
     "order_settle_max_wait_seconds": 10,

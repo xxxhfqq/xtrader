@@ -101,11 +101,6 @@ def _apply_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
 
     trade = cfg.setdefault("trade", {})
     trade.setdefault("min_fee", 5.0)
-    trade.setdefault("open_full_threshold", 0.7)
-    trade.setdefault("flat_threshold", 0.3)
-    trade.setdefault("open_candidate_threshold", 0.3)
-    trade.setdefault("rebalance_diff_threshold", 0.1)
-    trade.setdefault("min_trade_value", 100.0)
     trade.setdefault("bar_interval_minutes", 5)
     trade.setdefault("order_settle_initial_wait_seconds", 3)
     trade.setdefault("order_settle_max_wait_seconds", 10)
@@ -218,11 +213,6 @@ def validate_config(cfg: dict[str, Any]) -> None:
     _require_type(trade, dict, "trade")
     for key in (
         "min_fee",
-        "open_full_threshold",
-        "flat_threshold",
-        "open_candidate_threshold",
-        "rebalance_diff_threshold",
-        "min_trade_value",
         "order_settle_initial_wait_seconds",
         "order_settle_max_wait_seconds",
         "in_bar_poll_sleep_seconds",
@@ -236,7 +226,6 @@ def validate_config(cfg: dict[str, Any]) -> None:
         raise ValueError("trade.xiadan_path 不能为空")
     if float(trade["min_fee"]) < 0:
         raise ValueError("trade.min_fee 必须 >= 0")
-    _as_non_negative_float(trade["min_trade_value"], "trade.min_trade_value")
     _as_non_negative_float(
         trade["order_settle_initial_wait_seconds"],
         "trade.order_settle_initial_wait_seconds",
@@ -255,10 +244,6 @@ def validate_config(cfg: dict[str, Any]) -> None:
     )
     if float(trade["order_settle_max_wait_seconds"]) < float(trade["order_settle_initial_wait_seconds"]):
         raise ValueError("trade.order_settle_max_wait_seconds 必须 >= trade.order_settle_initial_wait_seconds")
-    for key in ("open_full_threshold", "flat_threshold", "open_candidate_threshold", "rebalance_diff_threshold"):
-        v = float(trade[key])
-        if not (0.0 <= v <= 1.0):
-            raise ValueError(f"trade.{key} 必须在 [0, 1] 之间")
 
     sessions = _require_key(trade, "trading_sessions", "trade")
     _require_type(sessions, list, "trade.trading_sessions")
